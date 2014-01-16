@@ -1,6 +1,7 @@
-class ProjectsController < Projects::ApplicationController
-  skip_before_filter :project, only: [:new, :create]
-  skip_before_filter :repository, only: [:new, :create]
+class ProjectsController < ApplicationController
+  skip_before_filter :authenticate_user!, only: [:show]
+  before_filter :project, except: [:new, :create]
+  before_filter :repository, except: [:new, :create]
 
   # Authorize
   before_filter :authorize_read_project!, except: [:index, :new, :create]
@@ -54,20 +55,22 @@ class ProjectsController < Projects::ApplicationController
   end
 
   def show
-    limit = (params[:limit] || 20).to_i
-    @events = @project.events.recent.limit(limit).offset(params[:offset] || 0)
+    return authenticate_user! unless @project.public || current_user
 
-    # Ensure project default branch is set if it possible
-    # Normally it defined on push or during creation
-    @project.discover_default_branch
+    limit = (params[:limit] || 20).to_i
+    @events = @project.events.recent
+    @events = event_filter.apply_filter(@events)
+    @events = @events.limit(limit).offset(params[:offset] || 0)
 
     respond_to do |format|
       format.html do
         if @project.empty_repo?
-          render "projects/empty"
+          render "projects/empty", layout: user_layout
         else
-          @last_push = current_user.recent_push(@project.id)
-          render :show
+          if current_user
+            @last_push = current_user.recent_push(@project.id)
+          end
+          render :show, layout: user_layout
         end
       end
       format.js
@@ -117,5 +120,9 @@ class ProjectsController < Projects::ApplicationController
 
   def set_title
     @title = 'New Project'
+  end
+
+  def user_layout
+    current_user ? "projects" : "public_projects"
   end
 end

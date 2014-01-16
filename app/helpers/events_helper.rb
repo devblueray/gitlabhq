@@ -28,7 +28,7 @@ module EventsHelper
                end
 
     content_tag :div, class: "filter_icon #{inactive}" do
-      link_to dashboard_path, class: 'has_tooltip event_filter_link', id: "#{key}_event_filter", 'data-original-title' => tooltip do
+      link_to request.path, class: 'has_tooltip event_filter_link', id: "#{key}_event_filter", 'data-original-title' => tooltip do
         content_tag :i, nil, class: icon_for_event[key]
       end
     end
@@ -123,6 +123,14 @@ module EventsHelper
   end
 
   def event_note(text)
-    sanitize(markdown(truncate(text, length: 150)), tags: %w(a img b pre p))
+    text = first_line(text)
+    text = truncate(text, length: 150)
+    sanitize(markdown(text), tags: %w(a img b pre p))
+  end
+
+  def event_commit_title(message)
+    escape_once(truncate(message.split("\n").first, length: 70))
+  rescue
+    "--broken encoding"
   end
 end

@@ -18,9 +18,11 @@ class Projects::CommitController < Projects::ApplicationController
     end
 
     @suppress_diff = result[:suppress_diff]
+    @force_suppress_diff = result[:force_suppress_diff]
 
     @note        = result[:note]
     @line_notes  = result[:line_notes]
+    @branches    = result[:branches]
     @notes_count = result[:notes_count]
     @target_type = :commit
     @target_id   = @commit.id

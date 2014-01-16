@@ -366,6 +366,15 @@ describe GitlabMarkdownHelper do
       markdown(actual).should match(%r{Apply <em><a.+>!#{merge_request.iid}</a></em>})
     end
 
+    it "should handle tables" do
+      actual = %Q{| header 1 | header 2 |
+| -------- | -------- |
+| cell 1   | cell 2   |
+| cell 3   | cell 4   |}
+
+      markdown(actual).should match(/\A<table/)
+    end
+
     it "should leave code blocks untouched" do
       helper.stub(:user_color_scheme_class).and_return(:white)
 
@@ -396,6 +405,30 @@ describe GitlabMarkdownHelper do
 
     it "should generate absolute urls for emoji" do
       markdown(":smile:").should include("src=\"#{url_to_image("emoji/smile")}")
+    end
+
+    it "should handle relative urls for a file in master" do
+      actual = "[GitLab API doc](doc/api/README.md)\n"
+      expected = "<p><a href=\"/#{project.path_with_namespace}/blob/master/doc/api/README.md\">GitLab API doc</a></p>\n"
+      markdown(actual).should match(expected)
+    end
+
+    it "should handle relative urls for a directory in master" do
+      actual = "[GitLab API doc](doc/api)\n"
+      expected = "<p><a href=\"/#{project.path_with_namespace}/tree/master/doc/api\">GitLab API doc</a></p>\n"
+      markdown(actual).should match(expected)
+    end
+
+    it "should handle absolute urls" do
+      actual = "[GitLab](https://www.gitlab.com)\n"
+      expected = "<p><a href=\"https://www.gitlab.com\">GitLab</a></p>\n"
+      markdown(actual).should match(expected)
+    end
+
+    it "should handle wiki urls" do
+      actual = "[Link](test/link)\n"
+      expected = "<p><a href=\"/#{project.path_with_namespace}/wikis/test/link\">Link</a></p>\n"
+      markdown(actual).should match(expected)
     end
   end
 

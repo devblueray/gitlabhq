@@ -12,7 +12,8 @@
       %ul.well-list
         %li
           %span.light Name:
-          %strong= @project.name
+          %strong
+            = link_to @project.name, project_path(@project)
         %li
           %span.light Namespace:
           %strong
@@ -24,7 +25,7 @@
           %span.light Owned by:
           %strong
             - if @project.owner
-              = link_to @project.owner_name, admin_user_path(@project.owner)
+              = link_to @project.owner_name, [:admin, @project.owner]
             - else
               (deleted)
 
@@ -34,7 +35,7 @@
             = @project.creator.try(:name) || '(deleted)'
 
         %li
-          %span.light Created at:
+          %span.light Created on:
           %strong
             = @project.created_at.stamp("March 1, 1999")
 
@@ -73,12 +74,29 @@
               %span.cgreen
                 %i.icon-lock
                 Private
+    .ui-box
+      .title
+        Transfer project
+      .ui-box-body
+        = form_for @project, url: transfer_admin_project_path(@project), method: :put do |f|
+          .control-group
+            = f.label :namespace_id, "Namespace"
+            .controls
+              = namespace_select_tag :namespace_id, selected: params[:namespace_id], class: 'input-large'
+
+          .control-group
+            .controls
+              = f.submit 'Transfer', class: 'btn btn-primary'
+
+
+
+
   .span6
     - if @group
       .ui-box
         .title
-          %strong #{@group.name} Group
-          members (#{@group.users_groups.count})
+          %strong #{@group.name}
+          group members (#{@group.users_groups.count})
           .pull-right
             = link_to admin_group_path(@group), class: 'btn btn-small' do
               %i.icon-edit
@@ -88,7 +106,7 @@
 
     .ui-box
       .title
-        Team
+        Project members
         %small
           (#{@project.users.count})
         .pull-right
@@ -98,10 +116,13 @@
       %ul.well-list.team_members
         - @project.users_projects.each do |users_project|
           - user = users_project.user
-          %li
+          %li.users_project
             %strong
               = link_to user.name, admin_user_path(user)
             .pull-right
-              %span.light= users_project.human_access
-              = link_to admin_project_member_path(@project, user), confirm: remove_from_project_team_message(@project, user), method: :delete, class: "btn btn-small btn-remove" do
-                %i.icon-remove
+              - if users_project.owner?
+                %span.light Owner
+              - else
+                %span.light= users_project.human_access
+                = link_to project_team_member_path(@project, user), confirm: remove_from_project_team_message(@project, user), method: :delete, remote: true, class: "btn btn-small btn-remove" do
+                  %i.icon-remove

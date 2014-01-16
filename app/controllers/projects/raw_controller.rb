@@ -8,12 +8,20 @@ class Projects::RawController < Projects::ApplicationController
   before_filter :require_non_empty_project
 
   def show
-    @blob = Gitlab::Git::Blob.new(@repository, @commit.id, @ref, @path)
+    @blob = @repository.blob_at(@commit.id, @path)
 
-    if @blob.exists?
+    if @blob
+      type = if @blob.mime_type =~ /html|javascript/
+               'text/plain; charset=utf-8'
+             else
+               @blob.mime_type
+             end
+
+      headers['X-Content-Type-Options'] = 'nosniff'
+
       send_data(
         @blob.data,
-        type: @blob.mime_type,
+        type: type,
         disposition: 'inline',
         filename: @blob.name
       )

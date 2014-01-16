@@ -3,6 +3,9 @@ module API
     class User < Grape::Entity
       expose :id, :username, :email, :name, :bio, :skype, :linkedin, :twitter,
              :theme_id, :color_scheme_id, :state, :created_at, :extern_uid, :provider
+      expose :is_admin?, as: :is_admin
+      expose :can_create_group?, as: :can_create_group
+      expose :can_create_project?, as: :can_create_project
     end
 
     class UserSafe < Grape::Entity
@@ -15,10 +18,6 @@ module API
 
     class UserLogin < User
       expose :private_token
-      expose :is_admin?, as: :is_admin
-      expose :can_create_group?, as: :can_create_group
-      expose :can_create_project?, as: :can_create_project
-      expose :can_create_team?, as: :can_create_team
     end
 
     class Hook < Grape::Entity
@@ -67,6 +66,12 @@ module API
       expose :projects, using: Entities::Project
     end
 
+    class GroupMember < UserBasic
+      expose :group_access, as: :access_level do |user, options|
+        options[:group].users_groups.find_by_user_id(user.id).group_access
+      end
+    end
+
     class RepoObject < Grape::Entity
       expose :name, :commit
       expose :protected do |repo, options|
@@ -86,15 +91,16 @@ module API
       expose :expires_at, :updated_at, :created_at
     end
 
-    class Milestone < Grape::Entity
-      expose :id
-      expose (:project_id) {|milestone| milestone.project.id}
+    class ProjectEntity < Grape::Entity
+      expose :id, :iid
+      expose (:project_id) { |entity| entity.project.id }
+    end
+
+    class Milestone < ProjectEntity
       expose :title, :description, :due_date, :state, :updated_at, :created_at
     end
 
-    class Issue < Grape::Entity
-      expose :id
-      expose (:project_id) {|issue| issue.project.id}
+    class Issue < ProjectEntity
       expose :title, :description
       expose :label_list, as: :labels
       expose :milestone, using: Entities::Milestone
@@ -102,13 +108,14 @@ module API
       expose :state, :updated_at, :created_at
     end
 
-    class SSHKey < Grape::Entity
-      expose :id, :title, :key, :created_at
+    class MergeRequest < ProjectEntity
+      expose :target_branch, :source_branch, :title, :state, :upvotes, :downvotes
+      expose :author, :assignee, using: Entities::UserBasic
+      expose :source_project_id, :target_project_id
     end
 
-    class MergeRequest < Grape::Entity
-      expose :id, :target_branch, :source_branch, :project_id, :title, :state
-      expose :author, :assignee, using: Entities::UserBasic
+    class SSHKey < Grape::Entity
+      expose :id, :title, :key, :created_at
     end
 
     class Note < Grape::Entity
@@ -128,6 +135,10 @@ module API
       expose :title, :project_id, :action_name
       expose :target_id, :target_type, :author_id
       expose :data, :target_title
+    end
+
+    class Namespace < Grape::Entity
+      expose :id, :path, :kind
     end
   end
 end

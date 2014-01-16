@@ -18,6 +18,7 @@
 #  merge_status      :string(255)
 #  target_project_id :integer          not null
 #  iid               :integer
+#  description       :text
 #
 
 require 'spec_helper'
@@ -43,14 +44,13 @@ describe MergeRequest do
     it { should include_module(Issuable) }
   end
 
-
   describe "#mr_and_commit_notes" do
     let!(:merge_request) { create(:merge_request) }
 
     before do
       merge_request.stub(:commits) { [merge_request.source_project.repository.commit] }
-      create(:note, commit_id: merge_request.commits.first.id, noteable_type: 'Commit')
-      create(:note, noteable: merge_request)
+      create(:note, commit_id: merge_request.commits.first.id, noteable_type: 'Commit', project: merge_request.project)
+      create(:note, noteable: merge_request, project: merge_request.project)
     end
 
     it "should include notes for commits" do
@@ -104,4 +104,34 @@ describe MergeRequest do
     end
   end
 
+  describe 'detection of issues to be closed' do
+    let(:issue0) { create :issue, project: subject.project }
+    let(:issue1) { create :issue, project: subject.project }
+    let(:commit0) { mock('commit0', closes_issues: [issue0]) }
+    let(:commit1) { mock('commit1', closes_issues: [issue0]) }
+    let(:commit2) { mock('commit2', closes_issues: [issue1]) }
+
+    before do
+      subject.stub(unmerged_commits: [commit0, commit1, commit2])
+    end
+
+    it 'accesses the set of issues that will be closed on acceptance' do
+      subject.project.stub(default_branch: subject.target_branch)
+
+      subject.closes_issues.should == [issue0, issue1].sort_by(&:id)
+    end
+
+    it 'only lists issues as to be closed if it targets the default branch' do
+      subject.project.stub(default_branch: 'master')
+      subject.target_branch = 'something-else'
+
+      subject.closes_issues.should be_empty
+    end
+  end
+
+  it_behaves_like 'an editable mentionable' do
+    let(:subject) { create :merge_request, source_project: mproject, target_project: mproject }
+    let(:backref_text) { "merge request !#{subject.iid}" }
+    let(:set_mentionable_text) { ->(txt){ subject.title = txt } }
+  end
 end

@@ -21,6 +21,8 @@ class Issue < ActiveRecord::Base
   include Issuable
   include InternalId
 
+  ActsAsTaggableOn.strict_case_match = true
+
   belongs_to :project
   validates :project, presence: true
 
@@ -56,4 +58,10 @@ class Issue < ActiveRecord::Base
 
   # Both open and reopened issues should be listed as opened
   scope :opened, -> { with_state(:opened, :reopened) }
+
+  # Mentionable overrides.
+
+  def gfm_reference
+    "issue ##{iid}"
+  end
 end

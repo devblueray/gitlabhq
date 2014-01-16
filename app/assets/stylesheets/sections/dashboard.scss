@@ -51,7 +51,7 @@
   li {
     &.active {
       a {
-        @include linear-gradient(#f5f5f5, #eee);
+        background-color: #EEE;
         border-bottom: 1px solid #EEE !important;
         &:hover {
           background: #eee;
@@ -60,13 +60,13 @@
     }
 
     a {
-      border-color: #CCC !important;
+      border-color: #DDD !important;
     }
   }
 }
 
 .project-row, .group-row {
-  padding: 12px 15px !important;
+  padding: 10px 15px !important;
 
   .namespace-name {
     color: #666;
@@ -74,9 +74,8 @@
   }
 
   .project-name, .group-name {
-    font-size: 16px;
+    font-size: 15px;
   }
-
 
   .arrow {
     float: right;
@@ -86,12 +85,18 @@
     color: #666;
   }
 
-  .last-activity, .owner-info {
+  .last-activity {
     color: #AAA;
     display: block;
     margin-top: 5px;
-    .date, .owner {
+    .date {
       color: #777;
     }
+  }
+}
+
+.group-row {
+  .arrow {
+    padding: 2px 5px;
   }
 }

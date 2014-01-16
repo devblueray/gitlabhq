@@ -11,7 +11,16 @@
 #
 # It's strongly recommended to check this file into your version control system.
 
-ActiveRecord::Schema.define(:version => 20130821090531) do
+ActiveRecord::Schema.define(:version => 20131112114325) do
+
+  create_table "broadcast_messages", :force => true do |t|
+    t.text     "message",    :null => false
+    t.datetime "starts_at"
+    t.datetime "ends_at"
+    t.integer  "alert_type"
+    t.datetime "created_at", :null => false
+    t.datetime "updated_at", :null => false
+  end
 
   create_table "deploy_keys_projects", :force => true do |t|
     t.integer  "deploy_key_id", :null => false
@@ -100,6 +109,7 @@ ActiveRecord::Schema.define(:version => 20130821090531) do
     t.string   "merge_status"
     t.integer  "target_project_id",                       :null => false
     t.integer  "iid"
+    t.text     "description"
   end
 
   add_index "merge_requests", ["assignee_id"], :name => "index_merge_requests_on_assignee_id"
@@ -128,7 +138,7 @@ ActiveRecord::Schema.define(:version => 20130821090531) do
   create_table "namespaces", :force => true do |t|
     t.string   "name",                        :null => false
     t.string   "path",                        :null => false
-    t.integer  "owner_id",                    :null => false
+    t.integer  "owner_id"
     t.datetime "created_at",                  :null => false
     t.datetime "updated_at",                  :null => false
     t.string   "type"
@@ -144,14 +154,15 @@ ActiveRecord::Schema.define(:version => 20130821090531) do
     t.text     "note"
     t.string   "noteable_type"
     t.integer  "author_id"
-    t.datetime "created_at",    :null => false
-    t.datetime "updated_at",    :null => false
+    t.datetime "created_at",                       :null => false
+    t.datetime "updated_at",                       :null => false
     t.integer  "project_id"
     t.string   "attachment"
     t.string   "line_code"
     t.string   "commit_id"
     t.integer  "noteable_id"
     t.text     "st_diff"
+    t.boolean  "system",        :default => false, :null => false
   end
 
   add_index "notes", ["author_id"], :name => "index_notes_on_author_id"
@@ -169,7 +180,6 @@ ActiveRecord::Schema.define(:version => 20130821090531) do
     t.datetime "created_at",                                   :null => false
     t.datetime "updated_at",                                   :null => false
     t.integer  "creator_id"
-    t.string   "default_branch"
     t.boolean  "issues_enabled",         :default => true,     :null => false
     t.boolean  "wall_enabled",           :default => true,     :null => false
     t.boolean  "merge_requests_enabled", :default => true,     :null => false
@@ -281,10 +291,16 @@ ActiveRecord::Schema.define(:version => 20130821090531) do
     t.integer  "notification_level",     :default => 1,     :null => false
     t.datetime "password_expires_at"
     t.integer  "created_by_id"
+    t.string   "avatar"
+    t.string   "confirmation_token"
+    t.datetime "confirmed_at"
+    t.datetime "confirmation_sent_at"
+    t.string   "unconfirmed_email"
   end
 
   add_index "users", ["admin"], :name => "index_users_on_admin"
   add_index "users", ["authentication_token"], :name => "index_users_on_authentication_token", :unique => true
+  add_index "users", ["confirmation_token"], :name => "index_users_on_confirmation_token", :unique => true
   add_index "users", ["email"], :name => "index_users_on_email", :unique => true
   add_index "users", ["extern_uid", "provider"], :name => "index_users_on_extern_uid_and_provider", :unique => true
   add_index "users", ["name"], :name => "index_users_on_name"

@@ -12,7 +12,7 @@
 .ui-box {
   background: #FFF;
   margin-bottom: 20px;
-  border: 1px solid #CCC;
+  border: 1px solid #DDD;
   word-wrap: break-word;
 
   &.small-box {
@@ -32,8 +32,9 @@
   }
 
   &.ui-box-show {
+    color: #666;
     margin:20px 0;
-    background: #FFF;
+    background: #FAFAFA;
 
     .control-group {
       margin-bottom: 0;
@@ -41,11 +42,13 @@
   }
 
   &.ui-box-danger {
+    background: #f7f7f7;
+    border: none;
+
     .title {
-      @include linear-gradient(#F26E5E, #bd362f);
+      background: #D65;
       color: #fff;
       text-shadow: 0 1px 1px #900;
-      font-weight: bold;
     }
   }
 
@@ -69,7 +72,6 @@
 
   .ui-box-head {
     .box-title {
-      color: $style_color;
       font-size: 18px;
       font-weight: normal;
       line-height: 28px;
@@ -96,9 +98,9 @@
   }
 
   .title {
-    @include bg-gray-gradient;
-    border-bottom: 1px solid #CCC;
-    color: #456;
+    background-color: #EEE;
+    border-bottom: 1px solid #DDD;
+    color: #666;
     font-size: 16px;
     text-shadow: 0 1px 1px #fff;
     padding: 0 10px;

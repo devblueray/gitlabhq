@@ -26,27 +26,48 @@
           %span.pull-right
             = current_user.owned_projects.count
 
+
+    - if @groups.present?
+      %fieldset
+        %legend Groups
+        %ul.bordered-list
+          - @groups.each do |group|
+            %li{ class: (group.name == params[:group]) ? 'active' : 'light' }
+              = link_to projects_dashboard_path(group: group.name) do
+                %i.icon-folder-close-alt
+                = group.name
+                %small.pull-right
+                  = group.projects.count
+
+
+
     - if @labels.present?
-      %p.light Filter by label:
-      %ul.bordered-list
-        - @labels.each do |label|
-          %li{ class: (label.name == params[:label]) ? 'active' : 'light' }
-            = link_to projects_dashboard_path(scope: params[:scope], label: label.name) do
-              %i.icon-tag
-              = label.name
+      %fieldset
+        %legend Labels
+        %ul.bordered-list
+          - @labels.each do |label|
+            %li{ class: (label.name == params[:label]) ? 'active' : 'light' }
+              = link_to projects_dashboard_path(scope: params[:scope], label: label.name) do
+                %i.icon-tag
+                = label.name
 
   .span9
     %ul.bordered-list.my-projects.top-list
       - @projects.each do |project|
-        %li
+        %li.my-project-row
           %h4.project-title
-            %span.access-icon
-              - if project.public
-                = public_icon
-              - else
-                = private_icon
             = link_to project_path(project), class: dom_class(project) do
-              %strong= project.name_with_namespace
+              = project.name_with_namespace
+            - if project.public
+              %small.access-icon
+                = public_icon
+                Public
+
+            - if current_user.can_leave_project?(project)
+              .pull-right
+                = link_to leave_project_team_members_path(project), confirm: "Leave project?", method: :delete, remote: true, class: "btn-tiny btn remove-row", title: 'Leave project' do
+                  %i.icon-signout
+                  Leave
 
             - if project.forked_from_project
               %small.pull-right
@@ -64,6 +85,7 @@
             .last-activity
               %span.light Last activity:
               %span.date= project_last_activity(project)
+
 
         - if @projects.blank?
           %li

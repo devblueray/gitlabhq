@@ -2,7 +2,8 @@ require 'gitlab/satellite/satellite'
 
 class Projects::MergeRequestsController < Projects::ApplicationController
   before_filter :module_enabled
-  before_filter :merge_request, only: [:edit, :update, :show, :commits, :diffs, :automerge, :automerge_check, :ci_status]
+  before_filter :merge_request, only: [:edit, :update, :show, :commits, :diffs, :automerge, :automerge_check, :ci_status, :accept_without_merge, :reject, :mark_fixed]
+  before_filter :closes_issues, only: [:edit, :update, :show, :commits, :diffs]
   before_filter :validates_merge_request, only: [:show, :diffs]
   before_filter :define_show_vars, only: [:show, :diffs]
 
@@ -18,8 +19,16 @@ class Projects::MergeRequestsController < Projects::ApplicationController
   def index
     @merge_requests = MergeRequestsLoadContext.new(project, current_user, params).execute
     assignee_id, milestone_id = params[:assignee_id], params[:milestone_id]
+    assigned_group_id, created_group_id = params[:assigned_group_id], params[:created_group_id]
     @assignee = @project.team.find(assignee_id) if assignee_id.present? && !assignee_id.to_i.zero?
     @milestone = @project.milestones.find(milestone_id) if milestone_id.present? && !milestone_id.to_i.zero?
+    @user_groups = current_user.users_groups
+    @assigned_group = @user_groups.where(group_id: assigned_group_id).first.group if assigned_group_id.present?
+    @created_group = @user_groups.where(group_id: created_group_id).first.group if created_group_id.present?
+    # Merge request states, which will be available in the corresponding filter.
+    # We want to display all states, which displayed in the list MRs can have (i.e. everything what can be merged).
+    @available_states = MergeRequest::VALID_STATES_FOR_MERGE
+    @state = params[:state]
   end
 
   def show
@@ -39,6 +48,10 @@ class Projects::MergeRequestsController < Projects::ApplicationController
     @comments_target = {noteable_type: 'MergeRequest',
                         noteable_id: @merge_request.id}
     @line_notes = @merge_request.notes.where("line_code is not null")
+
+    diff_line_count = Commit::diff_line_count(@merge_request.diffs)
+    @suppress_diff = Commit::diff_suppress?(@merge_request.diffs, diff_line_count) && !params[:force_show_diff]
+    @force_suppress_diff = Commit::diff_force_suppress?(@merge_request.diffs, diff_line_count)
   end
 
   def new
@@ -101,6 +114,31 @@ class Projects::MergeRequestsController < Projects::ApplicationController
     end
   end
 
+  def change_review_status(appropriate_current_statuses, change_status_method, review_action)
+    return access_denied! unless allowed_to_review?
+
+    if appropriate_current_statuses.include?(@merge_request.state)
+      @merge_request.send(change_status_method)
+      @status = true
+    else
+      @status = false
+    end
+    @review_action = review_action
+    render "_review"
+  end
+
+  def accept_without_merge
+    change_review_status(MergeRequest::VALID_STATES_FOR_ACCEPT, :accept, 'accept (without merge)')
+  end
+
+  def reject
+    change_review_status(MergeRequest::VALID_STATES_FOR_REJECT, :reject, 'reject')
+  end
+
+  def mark_fixed
+    change_review_status(MergeRequest::VALID_STATES_FOR_MARK_FIXED, :mark_fixed, 'mark as fixed')
+  end
+
   def branch_from
     #This is always source
     @source_project = @merge_request.nil? ? @project : @merge_request.source_project
@@ -135,6 +173,10 @@ class Projects::MergeRequestsController < Projects::ApplicationController
     @merge_request ||= @project.merge_requests.find_by_iid!(params[:id])
   end
 
+  def closes_issues
+    @closes_issues ||= @merge_request.closes_issues
+  end
+
   def authorize_modify_merge_request!
     return render_404 unless can?(current_user, :modify_merge_request, @merge_request)
   end
@@ -148,12 +190,15 @@ class Projects::MergeRequestsController < Projects::ApplicationController
   end
 
   def validates_merge_request
-    # Show git not found page if target branch doesn't exist
-    return invalid_mr unless @merge_request.target_project.repository.branch_names.include?(@merge_request.target_branch)
+    # Show git not found page
+    # if there is no saved commits between source & target branch
+    if @merge_request.commits.blank?
+       # and if source target doesn't exist
+       return invalid_mr unless @merge_request.target_project.repository.branch_names.include?(@merge_request.target_branch)
 
-    # Show git not found page if source branch doesn't exist
-    # and there is no saved commits between source & target branch
-    return invalid_mr if !@merge_request.source_project.repository.branch_names.include?(@merge_request.source_branch) && @merge_request.commits.blank?
+       # or if source branch doesn't exist
+       return invalid_mr unless @merge_request.source_project.repository.branch_names.include?(@merge_request.source_branch)
+    end
   end
 
   def define_show_vars
@@ -165,20 +210,33 @@ class Projects::MergeRequestsController < Projects::ApplicationController
     @commits = @merge_request.commits
 
     @allowed_to_merge = allowed_to_merge?
-    @show_merge_controls = @merge_request.opened? && @commits.any? && @allowed_to_merge
+    @show_merge_controls = MergeRequest::VALID_STATES_FOR_MERGE.include?(@merge_request.state) && @commits.any? && @allowed_to_merge
+
+    @allowed_to_review = allowed_to_review?
+    @show_accept_button = MergeRequest::VALID_STATES_FOR_ACCEPT.include?(@merge_request.state) && @allowed_to_review
+    @show_reject_button = MergeRequest::VALID_STATES_FOR_REJECT.include?(@merge_request.state) && @allowed_to_review
+    @show_mark_fixed_button = MergeRequest::VALID_STATES_FOR_MARK_FIXED.include?(@merge_request.state) && @allowed_to_review
 
     @target_type = :merge_request
     @target_id = @merge_request.id
   end
 
   def allowed_to_merge?
-    action = if project.protected_branch?(@merge_request.target_branch)
+    action = if @merge_request.assignee == current_user
+               :push_code
+             elsif project.protected_branch?(@merge_request.target_branch)
                :push_code_to_protected_branches
              else
                :push_code
              end
 
-    can?(current_user, action, @project)
+    can_push_code = can?(current_user, action, @project)
+    can_merge = can?(current_user, :merge_merge_request, @project)
+    return can_push_code && can_merge
+  end
+
+  def allowed_to_review?
+    can?(current_user, :review_merge_request, @project)
   end
 
   def invalid_mr

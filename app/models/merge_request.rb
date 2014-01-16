@@ -18,6 +18,7 @@
 #  merge_status      :string(255)
 #  target_project_id :integer          not null
 #  iid               :integer
+#  description       :text
 #
 
 require Rails.root.join("app/models/commit")
@@ -30,24 +31,36 @@ class MergeRequest < ActiveRecord::Base
   belongs_to :target_project, foreign_key: :target_project_id, class_name: "Project"
   belongs_to :source_project, foreign_key: :source_project_id, class_name: "Project"
 
-  attr_accessible :title, :assignee_id, :source_project_id, :source_branch, :target_project_id, :target_branch, :milestone_id, :author_id_of_changes, :state_event
-
+  attr_accessible :title, :assignee_id, :source_project_id, :source_branch, :target_project_id, :target_branch, :milestone_id, :author_id_of_changes, :state_event, :description
 
   attr_accessor :should_remove_source_branch
 
   state_machine :state, initial: :opened do
     event :close do
-      transition [:reopened, :opened] => :closed
+      transition [:reopened, :opened, :accepted, :rejected, :fixed] => :closed
     end
 
     event :merge do
-      transition [:reopened, :opened] => :merged
+      transition [:reopened, :opened, :accepted, :rejected, :fixed] => :merged
+    end
+
+    event :accept do
+      transition [:reopened, :opened, :fixed, :rejected] => :accepted
+    end
+
+    event :reject do
+      transition [:reopened, :opened, :fixed, :accepted] => :rejected
+    end
+
+    event :mark_fixed do
+      transition [:rejected] => :fixed
     end
 
     event :reopen do
       transition closed: :reopened
     end
 
+    # New (not reviewed merge request)
     state :opened
 
     state :reopened
@@ -55,6 +68,15 @@ class MergeRequest < ActiveRecord::Base
     state :closed
 
     state :merged
+
+    # Reviewed and without issues which should be fixed, but not merged yet
+    state :accepted
+
+    # Reviewed and containing some issues
+    state :rejected
+
+    # Fixed after review
+    state :fixed
   end
 
   state_machine :merge_status, initial: :unchecked do
@@ -88,7 +110,8 @@ class MergeRequest < ActiveRecord::Base
 
   scope :of_group, ->(group) { where("source_project_id in (:group_project_ids) OR target_project_id in (:group_project_ids)", group_project_ids: group.project_ids) }
   scope :of_user_team, ->(team) { where("(source_project_id in (:team_project_ids) OR target_project_id in (:team_project_ids) AND assignee_id in (:team_member_ids))", team_project_ids: team.project_ids, team_member_ids: team.member_ids) }
-  scope :opened, -> { with_state(:opened) }
+  # Hack: we want the review states ('accepted', 'rejected', 'fixed') to behave in the same way as the 'opened' one
+  scope :opened, -> { with_states(:opened, :accepted, :rejected, :fixed) }
   scope :closed, -> { with_state(:closed) }
   scope :merged, -> { with_state(:merged) }
   scope :by_branch, ->(branch_name) { where("(source_branch LIKE :branch) OR (target_branch LIKE :branch)", branch: branch_name) }
@@ -99,6 +122,16 @@ class MergeRequest < ActiveRecord::Base
   # Closed scope for merge request should return
   # both merged and closed mr's
   scope :closed, -> { with_states(:closed, :merged) }
+
+  VALID_STATES_FOR_MERGE = ["opened", "reopened", "accepted", "rejected", "fixed"]
+  VALID_STATES_FOR_ACCEPT = ["opened", "reopened", "rejected", "fixed"]
+  VALID_STATES_FOR_REJECT = ["opened", "reopened", "accepted", "fixed"]
+  VALID_STATES_FOR_MARK_FIXED = ["rejected"]
+
+  # Hack: we want the review states ('accepted', 'rejected', 'fixed') to behave in the same way as the 'opened' one
+  def opened?
+    return state == "opened" || accepted? || rejected? || fixed?
+  end
 
   def validate_branches
     if target_project==source_project && target_branch == source_branch
@@ -222,7 +255,11 @@ class MergeRequest < ActiveRecord::Base
 
   def mr_and_commit_notes
     commit_ids = commits.map(&:id)
-    Note.where("(noteable_type = 'MergeRequest' AND noteable_id = :mr_id) OR (noteable_type = 'Commit' AND commit_id IN (:commit_ids))", mr_id: id, commit_ids: commit_ids)
+    project.notes.where(
+      "(noteable_type = 'MergeRequest' AND noteable_id = :mr_id) OR (noteable_type = 'Commit' AND commit_id IN (:commit_ids))",
+      mr_id: id,
+      commit_ids: commit_ids
+    )
   end
 
   # Returns the raw diff for this merge request
@@ -249,6 +286,24 @@ class MergeRequest < ActiveRecord::Base
 
   def disallow_source_branch_removal?
     (source_project.root_ref? source_branch) || for_fork?
+  end
+
+  def project
+    target_project
+  end
+
+  # Return the set of issues that will be closed if this merge request is accepted.
+  def closes_issues
+    if target_branch == project.default_branch
+      unmerged_commits.map { |c| c.closes_issues(project) }.flatten.uniq.sort_by(&:id)
+    else
+      []
+    end
+  end
+
+  # Mentionable override.
+  def gfm_reference
+    "merge request !#{iid}"
   end
 
   def project

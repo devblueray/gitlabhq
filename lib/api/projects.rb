@@ -31,6 +31,16 @@ module API
         present @projects, with: Entities::Project
       end
 
+      # Get all projects for admin user
+      #
+      # Example Request:
+      #   GET /projects/all
+      get '/all' do
+        authenticated_as_admin!
+        @projects = paginate Project
+        present @projects, with: Entities::Project
+      end
+
       # Get a single project
       #
       # Parameters:
@@ -60,7 +70,6 @@ module API
       # Parameters:
       #   name (required) - name for new project
       #   description (optional) - short project description
-      #   default_branch (optional) - 'master' by default
       #   issues_enabled (optional)
       #   wall_enabled (optional)
       #   merge_requests_enabled (optional)
@@ -73,16 +82,15 @@ module API
       post do
         required_attributes! [:name]
         attrs = attributes_for_keys [:name,
-                                    :path,
-                                    :description,
-                                    :default_branch,
-                                    :issues_enabled,
-                                    :wall_enabled,
-                                    :merge_requests_enabled,
-                                    :wiki_enabled,
-                                    :snippets_enabled,
-                                    :namespace_id,
-                                    :public]
+                                     :path,
+                                     :description,
+                                     :issues_enabled,
+                                     :wall_enabled,
+                                     :merge_requests_enabled,
+                                     :wiki_enabled,
+                                     :snippets_enabled,
+                                     :namespace_id,
+                                     :public]
         @project = ::Projects::CreateContext.new(current_user, attrs).execute
         if @project.saved?
           present @project, with: Entities::Project
@@ -113,14 +121,14 @@ module API
         authenticated_as_admin!
         user = User.find(params[:user_id])
         attrs = attributes_for_keys [:name,
-                                    :description,
-                                    :default_branch,
-                                    :issues_enabled,
-                                    :wall_enabled,
-                                    :merge_requests_enabled,
-                                    :wiki_enabled,
-                                    :snippets_enabled,
-                                    :public]
+                                     :description,
+                                     :default_branch,
+                                     :issues_enabled,
+                                     :wall_enabled,
+                                     :merge_requests_enabled,
+                                     :wiki_enabled,
+                                     :snippets_enabled,
+                                     :public]
         @project = ::Projects::CreateContext.new(user, attrs).execute
         if @project.saved?
           present @project, with: Entities::Project
@@ -129,6 +137,16 @@ module API
         end
       end
 
+      # Remove project
+      #
+      # Parameters:
+      #   id (required) - The ID of a project
+      # Example Request:
+      #   DELETE /projects/:id
+      delete ":id" do
+        authorize! :remove_project, user_project
+        user_project.destroy
+      end
 
       # Mark this project as forked from another
       #
@@ -164,7 +182,6 @@ module API
           user_project.forked_project_link.destroy
         end
       end
-
 
       # Get a project team members
       #
@@ -261,6 +278,20 @@ module API
         else
           {message: "Access revoked", id: params[:user_id].to_i}
         end
+      end
+
+      # search for projects current_user has access to
+      #
+      # Parameters:
+      #   query (required) - A string contained in the project name
+      #   per_page (optional) - number of projects to return per page
+      #   page (optional) - the page to retrieve
+      # Example Request:
+      #   GET /projects/search/:query
+      get "/search/:query" do
+        ids = current_user.authorized_projects.map(&:id)
+        projects = Project.where("(id in (?) OR public = true) AND (name LIKE (?))", ids, "%#{params[:query]}%")
+        present paginate(projects), with: Entities::Project
       end
     end
   end
